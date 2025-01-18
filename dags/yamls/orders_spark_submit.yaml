@@ -1,0 +1,61 @@
+# User guide https://github.com/GoogleCloudPlatform/spark-on-k8s-operator/blob/master/docs/user-guide.md
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: spark-job-orders-1
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  image: img
+  imagePullPolicy: Always
+  mainApplicationFile: "local:///dags/spark-jobs/orders-spark-job.py"
+  hadoopConf: # Дополнительные параметры для доступа в S3
+    "fs.s3a.endpoint": "url"
+    "fs.s3a.region": "region"
+    "fs.s3a.access.key": "access"
+    "fs.s3a.secret.key": "secret"
+  sparkVersion: "3.1.1"
+  timeToLiveSeconds: 30
+  restartPolicy:
+    type: Never
+  volumes:
+    - name: git-repo
+      emptyDir:
+        sizeLimit: 1Gi
+    - name: ssh-key
+      secret:
+        secretName: ssh-key
+        defaultMode: 256
+  driver: # Конфигурация Spark Driver
+    javaOptions: "-Divy.cache.dir=/tmp -Divy.home=/tmp"
+    volumeMounts:
+      - name: "git-repo"
+        mountPath: /project
+      - name: ssh-key
+        mountPath: /tmp/ssh
+    initContainers: # Инициализация контейнера - клонирование проекта с исходным кодом
+      - name: git-clone
+        image: alpine/img
+        env:
+          - name: GIT_SSH_COMMAND
+            value: "ssh cmd"
+        command: ['sh', 'cmd']
+        volumeMounts:
+          - name: git-repo
+            mountPath: /project
+          - name: ssh-key
+            mountPath: /root/.ssh
+    cores: 1
+    coreLimit: "1200m"
+    memory: "1024m"
+    labels:
+      version: 3.1.1
+    serviceAccount: spark-driver
+  executor: # Конфигурация Spark Executor
+    image: img2
+    cores: 1
+    instances: 2
+    memory: "1024m"
+    labels:
+      version: 3.1.1
